@@ -7,10 +7,7 @@ import forex.interfaces.api.utils._
 import org.zalando.grafter.macros._
 
 @readerOf[ApplicationConfig]
-case class Routes(
-    processes: Processes,
-    runners: Runners
-) {
+case class Routes(processes: Processes, runners: Runners) {
   import server.Directives._
   import Directives._
   import Converters._
