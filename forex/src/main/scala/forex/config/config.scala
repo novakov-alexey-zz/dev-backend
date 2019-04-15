@@ -26,4 +26,6 @@ case class ExecutorsConfig(
     default: String
 )
 
-case class OneForgeConfig(quotesApiUri: String)
+case class OneForgeConfig(quotesApiPrefixUri: String, apiKey: String) {
+  override def toString: String = s"OneForgeConfig($quotesApiPrefixUri, xxxxxxxxxxxxx)"
+}
