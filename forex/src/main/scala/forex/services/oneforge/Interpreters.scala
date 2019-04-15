@@ -22,8 +22,9 @@ object Interpreters {
   def dummy[R](implicit m1: _task[R]): Algebra[Eff[R, ?]] =
     new Dummy[R]
 
-  def live[R](oneForgeCfg: OneForgeConfig)(implicit m1: _task[R]): Algebra[Eff[R, ?]] =
-    new Live[R](oneForgeCfg)
+  def live[R](oneForgeCfg: OneForgeConfig,
+              backend: SttpBackend[Task, Observable[ByteBuffer]])(implicit m1: _task[R]): Algebra[Eff[R, ?]] =
+    new Live[R](oneForgeCfg, backend)
 }
 
 final class Dummy[R] private[oneforge] (implicit m1: _task[R]) extends Algebra[Eff[R, ?]] {
@@ -31,22 +32,20 @@ final class Dummy[R] private[oneforge] (implicit m1: _task[R]) extends Algebra[E
     for {
       result ← fromTask(Task.now(Rate(pair, Price(BigDecimal(100)), Timestamp.now)))
     } yield Right(result)
-
-  override def close: Eff[R, Unit] = fromTask(Task.unit)
 }
 
-final class Live[R] private[oneforge] (cfg: OneForgeConfig)(implicit m1: _task[R])
-    extends Algebra[Eff[R, ?]]
+final class Live[R] private[oneforge] (cfg: OneForgeConfig, backend: SttpBackend[Task, Observable[ByteBuffer]])(
+  implicit m1: _task[R]
+) extends Algebra[Eff[R, ?]]
     with LazyLogging {
 
-  implicit val backend: SttpBackend[Task, Observable[ByteBuffer]] = AsyncHttpClientMonixBackend()
-
-  logger.debug(s"api URL: ${cfg.quotesApiUri}")
+  logger.debug(s"OneForge API URL: ${cfg.quotesApiPrefixUri}")
+  implicit val sttpBackend = backend
 
   override def get(pair: Rate.Pair): Eff[R, Error Either Rate] =
     for {
       response ← fromTask {
-        val uriForPair = s"${cfg.quotesApiUri}&pairs=${pair.show}"
+        val uriForPair = s"${cfg.quotesApiPrefixUri}${cfg.apiKey}&pairs=${pair.show}"
         sttp.get(uri"$uriForPair").response(asJson[List[Quote]]).send()
       }
       result ← fromTask {
@@ -54,13 +53,11 @@ final class Live[R] private[oneforge] (cfg: OneForgeConfig)(implicit m1: _task[R
           case Left(err) ⇒ Left(System(new RuntimeException(err)))
           case Right(r) ⇒
             r match {
-              case Left(parseErr) ⇒ Left(BadResponse(new RuntimeException(parseErr.message)))
+              case Left(parseErr) ⇒ Left(BadResponse(new RuntimeException(parseErr.error)))
               case Right(q) ⇒
                 q match {
                   case x :: Nil ⇒
-                    val timestamp =
-                      OffsetDateTime.ofInstant(Instant.ofEpochSecond(x.timestamp), TimeZone.getDefault.toZoneId)
-                    Right(Rate(pair, Price(x.price), Timestamp(timestamp)))
+                    Right(Rate(pair, Price(x.price), Timestamp(toOffsetTime(x.timestamp))))
                   case Nil ⇒ Left(BadResponse(new RuntimeException(s"Quote is empty, but expected one")))
                   case _ ⇒
                     Left(BadResponse(new RuntimeException(s"There are ${q.length}, but expected 1 quote only")))
@@ -72,5 +69,6 @@ final class Live[R] private[oneforge] (cfg: OneForgeConfig)(implicit m1: _task[R
       }
     } yield result
 
-  def close: Eff[R, Unit] = fromTask(Task(backend.close()))
+  private def toOffsetTime(l: Long) =
+    OffsetDateTime.ofInstant(Instant.ofEpochSecond(l), TimeZone.getDefault.toZoneId)
 }
