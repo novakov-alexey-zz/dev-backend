@@ -8,10 +8,7 @@ import org.zalando.grafter._
 import org.zalando.grafter.macros._
 
 @readerOf[ApplicationConfig]
-case class ActorSystems(
-    config: AkkaConfig
-) extends Start
-    with Stop {
+case class ActorSystems(config: AkkaConfig) extends Start with Stop {
 
   implicit lazy val system: ActorSystem =
     ActorSystem(config.name)
@@ -27,6 +24,8 @@ case class ActorSystems(
     }
 
   override def stop: Eval[StopResult] =
-    StopResult.eval("ActorSystems") {} // TODO: stop
+    StopResult.eval("ActorSystems") {
+      system.terminate()
+    }
 
 }

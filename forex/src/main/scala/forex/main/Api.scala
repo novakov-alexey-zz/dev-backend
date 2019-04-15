@@ -9,12 +9,8 @@ import forex.config._
 import forex.interfaces.api.Routes
 
 @readerOf[ApplicationConfig]
-case class Api(
-    config: ApiConfig,
-    actorSystems: ActorSystems,
-    executors: Executors,
-    routes: Routes
-) extends Start
+case class Api(config: ApiConfig, actorSystems: ActorSystems, executors: Executors, routes: Routes)
+    extends Start
     with Stop {
   import actorSystems._
 
@@ -28,8 +24,6 @@ case class Api(
 
   def stop: Eval[StopResult] =
     StopResult.eval("API") {
-      for {
-        binding ← bindingFuture
-      } binding.unbind()
+      bindingFuture.flatMap(_.unbind())
     }
 }
