@@ -24,6 +24,7 @@ libraryDependencies ++= Seq(
   "com.softwaremill.quicklens" %% "quicklens"                       % "1.4.11",
   "com.typesafe.akka"          %% "akka-actor"                      % "2.5.20",
   "com.typesafe.akka"          %% "akka-http"                       % "10.1.7",
+  "org.scalatest"              %% "scalatest"                       % "3.0.5" % Test,
   "de.heikoseeberger"          %% "akka-http-circe"                 % "1.25.2",
   "io.circe"                   %% "circe-core"                      % circeVersion,
   "io.circe"                   %% "circe-generic"                   % circeVersion,

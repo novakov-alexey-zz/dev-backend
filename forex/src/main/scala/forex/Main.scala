@@ -8,11 +8,10 @@ import org.zalando.grafter._
 
 object Main extends App with LazyLogging {
 
-  var app: Option[Application] = None
-
-  pureconfig.loadConfig[ApplicationConfig]("app") match {
+  def startApp: Option[Application] = pureconfig.loadConfig[ApplicationConfig]("app") match {
     case Left(errors) ⇒
       logger.error(s"Errors loading the configuration:\n${errors.toList.mkString("- ", "\n- ", "")}")
+      None
     case Right(applicationConfig) ⇒
       val application = configure[Application](applicationConfig).configure()
 
@@ -22,14 +21,17 @@ object Main extends App with LazyLogging {
           case results if results.exists(!_.success) ⇒
             logger.error(toStartErrorString(results))
             Rewriter.stopAll(application).map(_ ⇒ ())
+            Eval.now(None)
           case results ⇒
             logger.info(toStartSuccessString(results))
             Eval.now {
-              app = Some(application)
+              Some(application)
             }
         }
         .value
   }
+
+  val app = startApp
 
   sys.addShutdownHook {
     app.foreach(Rewriter.stopAll(_))
