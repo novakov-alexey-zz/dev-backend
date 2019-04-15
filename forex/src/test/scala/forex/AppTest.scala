@@ -43,16 +43,22 @@ class AppTest extends WordSpec with Matchers with BeforeAndAfterAll with LazyLog
   "RatesRoutes" should {
     "return Forex quotes for a currency pair" in {
       //given
+      app should be('defined)
+      val instance = app.get
+      val host = instance.api.config.interface
+      val port = instance.api.config.port
       val from: Currency = Currency.USD
       val to: Currency = Currency.EUR
+
+      //when
       val f = sttp
-        .get(uri"http://0.0.0.0:8888/?from=${from.show}&to=${to.show}")
+        .get(uri"http://$host:$port/?from=${from.show}&to=${to.show}")
         .response(asJson[GetApiResponse])
         .send()
         .runToFuture
-      //when
       val response = Await.result(f, 30.seconds)
       println("response:\n" + response.body)
+
       //then
       response.code should be(200)
       response.body should be('right)
