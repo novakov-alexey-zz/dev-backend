@@ -18,8 +18,7 @@ case class Api(
     with Stop {
   import actorSystems._
 
-  implicit private val ec =
-    executors.default
+  implicit private val ec = executors.default
 
   private lazy val bindingFuture: Future[Http.ServerBinding] =
     Http().bindAndHandle(routes.route, config.interface, config.port)

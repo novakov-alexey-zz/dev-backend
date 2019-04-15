@@ -1,27 +1,29 @@
 package forex.services.oneforge
 
-import java.time.{Instant, OffsetDateTime}
+import java.nio.ByteBuffer
+import java.time.{ Instant, OffsetDateTime }
 import java.util.TimeZone
 
 import cats.implicits._
-import forex.domain._
-import monix.eval.Task
-import org.atnos.eff._
-import org.atnos.eff.all._
-import org.atnos.eff.addon.monix.task._
 import com.softwaremill.sttp._
-import com.softwaremill.sttp.circe._
 import com.softwaremill.sttp.asynchttpclient.monix.AsyncHttpClientMonixBackend
-import forex.services.oneforge.Error.{BadResponse, System}
+import com.softwaremill.sttp.circe._
+import com.typesafe.scalalogging.LazyLogging
+import forex.config.OneForgeConfig
+import forex.domain._
+import forex.services.oneforge.Error.{ BadResponse, System }
 import forex.services.oneforge.models.Quote
-import io.circe
+import monix.eval.Task
+import monix.reactive.Observable
+import org.atnos.eff._
+import org.atnos.eff.addon.monix.task._
 
 object Interpreters {
   def dummy[R](implicit m1: _task[R]): Algebra[Eff[R, ?]] =
     new Dummy[R]
 
-  def live[R](implicit m1: _task[R]): Algebra[Eff[R, ?]] =
-    new Live[R]
+  def live[R](oneForgeCfg: OneForgeConfig)(implicit m1: _task[R]): Algebra[Eff[R, ?]] =
+    new Live[R](oneForgeCfg)
 }
 
 final class Dummy[R] private[oneforge] (implicit m1: _task[R]) extends Algebra[Eff[R, ?]] {
@@ -29,23 +31,25 @@ final class Dummy[R] private[oneforge] (implicit m1: _task[R]) extends Algebra[E
     for {
       result ← fromTask(Task.now(Rate(pair, Price(BigDecimal(100)), Timestamp.now)))
     } yield Right(result)
+
+  override def close: Eff[R, Unit] = fromTask(Task.unit)
 }
 
-final class Live[R] private[oneforge] (implicit m1: _task[R]) extends Algebra[Eff[R, ?]] {
-  //TODO: stop backend on app shutdown
-  implicit val backend = AsyncHttpClientMonixBackend()
-  //TODO: move to config
-  val oneForgeQuotesUri = "https://forex.1forge.com/1.0.3/quotes?api_key=iSvTDXCMIPjuIJZTSOVP9RUs0Dkvw83K"
+final class Live[R] private[oneforge] (cfg: OneForgeConfig)(implicit m1: _task[R])
+    extends Algebra[Eff[R, ?]]
+    with LazyLogging {
+
+  implicit val backend: SttpBackend[Task, Observable[ByteBuffer]] = AsyncHttpClientMonixBackend()
+
+  logger.debug(s"api URL: ${cfg.quotesApiUri}")
 
   override def get(pair: Rate.Pair): Eff[R, Error Either Rate] =
     for {
       response ← fromTask {
-        val uriForPair = s"$oneForgeQuotesUri&pairs=${pair.show}"
+        val uriForPair = s"${cfg.quotesApiUri}&pairs=${pair.show}"
         sttp.get(uri"$uriForPair").response(asJson[List[Quote]]).send()
       }
       result ← fromTask {
-        println("body:")
-        println(response.body)
         val rate = response.body match {
           case Left(err) ⇒ Left(System(new RuntimeException(err)))
           case Right(r) ⇒
@@ -67,4 +71,6 @@ final class Live[R] private[oneforge] (implicit m1: _task[R]) extends Algebra[Ef
         Task.now(rate)
       }
     } yield result
+
+  def close: Eff[R, Unit] = fromTask(Task(backend.close()))
 }
